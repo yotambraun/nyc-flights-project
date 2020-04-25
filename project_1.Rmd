@@ -1,0 +1,265 @@
+---
+title: "Project_1"
+author: " Yotam Braun 309914646, Shira Rothmann 208309245"
+date: "21.4.2020"
+output: html_document
+---
+###main libraries:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library("nycflights13") #the library of the data nyc flights
+library(dplyr) #main library for alot things
+library(ggplot2) #for grpahic plots
+library(tidyverse)
+library(scales)
+library(maps)#for USA map in q2
+library(data.table)
+library(pander)
+library(geosphere)
+library(ggpubr) #for q3 to merge the graphs
+library(nullabor)#for do multiply sample graph in q4
+```
+
+
+###Background:
+####load the data
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+flights = nycflights13::flights
+weather = nycflights13::weather
+airport = nycflights13::airports
+planes = nycflights13::planes
+airlines = nycflights13::airlines
+```
+
+####When looking at the data, the table of flights and weather have a common variables, so we can join of those tables, by year, month day, hour, time_hour.
+###produce a right_join:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+flights_weather = right_join(flights,weather %>% select(-year, -month, -day, -hour, -wind_gust), by=c('origin','time_hour'))
+```
+
+##Question 1: Graph Critique
+1. What questions / stories the graphic is trying to answer?
+Answer: The graph "temporal effects" is showing the cycles of flights from 2008 jan - 2009 jan, comparing the connections between flights that depurtre and the late flights in the same year . The blue line is for all the scheduled for deprture flights, and the red line is for the flights that got late more than 15 minutes. We can see the effect of the economic recession in sep 2008 there is a decreasing at the flights per day affter the recession. It seems that the mean flights per day is around 20. As we can see in holidays there is less demanding for flights but day before it is upper. When there is less demanding there are less depurtre delayed becaues the airport is less busy.the mean flights per day of the depurtre delayed is around 5. 
+
+In the second graph : "flights depurtre delayed 15 min" the question is which state has the most % depurtre delayed.
+
+2. Do they answer successfully?
+Answer: In the graph "flights depurtre delayed 15 min" it seems that the color and the length of the line give alot of visually information but for our opinion it's too much confusing because alot of colors and alot of lines for some people can be harder to get it cut clear conclusion.
+But we can see that at the west and east coast are more likley to be delayed to compare to the north and south maybe because there are more flights for those ares.
+
+In the graph "temporal effects" it seems really informative cause it's show 2 parallel grpahic lines and there are some marked points that give clear insight of the trendline as the the months goes by.
+
+3. Do they raise new questions not addressed?
+Answer: When cover the "temporal effects" some questions raise from the graph. First of all contrary from our thinking why at holidays there are less deprutre flights, second why after the recssion combine with the min peak at the holiday there were alot of delayed at some point. general question alot of min peak in the depurtre flights and we thought it will change the amount of delayed per day but it didn't. there for we want to find out more about the relationship.
+
+When we cover the "flights depurtre delayed 15 min" why the nearest states have any type of delayed. why for some state there are the same flights but for other airports in the same state have other amount of delayed it's strange.
+
+4. Please suggest one way in which these figures can be improved.
+Answer: One way to improve the "flights depurtre delayed 15 min" graph we can change the lines for some state that has a few line of flights there to get one line of the mean of all the lines tere, maybe less colors or change the width of the lines.
+maybe change from one Continuous to a Stripe line.
+
+One way to improve the "temporal effects" is show the mean of the flights per day in all the categories as a bold line that be more clear, maybe make a zoom in from months to weeks after the recssion at the sep 2008.
+
+##Question 2: Reproducing these analyses
+
+###2.1 A graphic summarizing the flight volume and flights delayed, broken by day and showing weekly cycles.
+Here, we bulid a graph that shows the number of flight for each day during the all year of 2013 (in blue), and the amount of flights that were delay* for each day during the all year of 2013 (in red).
+
+*delay = more then 15 min delay.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+counter_day = flights %>% group_by(year,month,day) %>% summarise(mean_dep_delay = mean(dep_delay,na.rm = T, time_hour = time_hour),
+            mean_arr_delay = mean(arr_delay, na.rm = T),
+            n = n(), delayed = sum(dep_delay>15, na.rm = T))
+
+counter_day$time_hour = as.Date(with(counter_day, paste(year, month, day,sep="-")), "%Y-%m-%d")
+
+counter_day %>% ggplot() + 
+  geom_line(aes(x=(time_hour), y=n), color='blue') + 
+  geom_point(aes(x=(time_hour), y=n), color='blue') + 
+  geom_bar(aes(y=delayed,x=(time_hour)), stat = "identity",fill="darkred",width = 0.3) + 
+  ylim(0,1050) + theme(axis.text.x =element_text(size = 6, vjust = 1))+
+  scale_x_date(breaks = "1 month", minor_breaks = "1 day") +
+  ylab("Flights per day") +xlab("Time line") +ggtitle("Temporal Effects in 2013",subtitle = "WEEKLY CYCLES")+theme(plot.title = element_text(hjust = 0.5),plot.subtitle = element_text(hjust = 0.5)) +geom_text(aes(x=counter_day$time_hour[2],y=1000,label="All flights"),col="blue",size = 3)+
+  geom_text(aes(x=counter_day$time_hour[10],y=350,label="Delayed flights>15"),col="darkred",size =2.5)
+```
+
+We can see from this graph that when there is more flights, there is more flights that are delayed. Also we can see that on sunday there is less flights (and therefor less delays). 
+
+
+###2.2 graphic summarizing the percent of fights delayed, broken by destination Airport
+
+At first we join the flights data set and the airports data set, so we will have the loction of the airports of those flights, so we can see them on the map.
+We calcualte the the number of the flights that arrive to the same destination, and the number of flights that delayed* to the same destination.
+All the flights are from NYC, And we treated the three New York airports like one airports, because of the very close locations on the map.
+Then we calcualte the precent of delay for each desination, by divide the number of delay to the total number and multiply 100.
+We divided the percentage range into colors, and build a plot (using ggplot) with USA map and arrows that show the destination. The colors of the arrows are according to the percentage range we have chosen.
+
+*delay = more then 15 min delay.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+flights_latlon <- flights %>%
+  inner_join(select(airports, origin = faa, origin_lat = lat, origin_lon = lon),
+    by = "origin"
+  ) %>%
+  inner_join(select(airports, dest = faa, dest_lat = lat, dest_lon = lon),
+    by = "dest"
+  )
+
+flights_per_dest = flights_latlon %>% group_by(flights_latlon$dest) %>% count()
+flights_per_dest_delay = flights_latlon %>% group_by(flights_latlon$dest) %>% filter(dep_delay > 15) %>% count()
+total_and_delay = merge(x = flights_per_dest, y = flights_per_dest_delay, by = "flights_latlon$dest", all.x = TRUE)
+total_and_delay[is.na(total_and_delay)]<-0
+total_and_delay$dest <-total_and_delay$`flights_latlon$dest`
+
+total_and_delay$precent <- (total_and_delay$n.y/total_and_delay$n.x)*100
+distinct_dest_loc = flights_latlon %>% select(dest, dest_lat, dest_lon) %>% distinct()
+precentage_dest = merge(x=total_and_delay, y=distinct_dest_loc, by="dest", all = TRUE)
+precentage_dest$color<- rep("red")
+precentage_dest[precentage_dest$precent<=25,8]<-"orange"
+precentage_dest[precentage_dest$precent<=20,8]<-"blue"
+precentage_dest[precentage_dest$precent<=15,8]<-"purple"
+precentage_dest[precentage_dest$precent<=10,8]<- "green"
+
+precentage_dest %>%
+  ggplot() + 
+  borders("state") +
+  geom_segment(aes(
+    x = -74.1686, xend = dest_lon,
+    y = 40.6925, yend = dest_lat),arrow = arrow(length = unit(0.1, "cm")),type = "closed",color=precentage_dest$color, show.legend = TRUE)+
+  coord_quickmap() + labs(y = "Latitude", x = "Longitude") +
+  geom_text(aes(x=-155,y=55,label="<=10%"),col="green",size =4.5)+ geom_text(aes(x=-155,y=50,label="10%-15%"),col="purple",size =4.5) +geom_text(aes(x=-155,y=45,label="15%-20%"),col="blue",size =4.5)+ geom_text(aes(x=-155,y=40,label="20%-25%"),col="orange",size =4.5)+ geom_text(aes(x=-155,y=35,label=">25%"),col="red",size =4.5)+
+  ggtitle("% of Flights Departures Delayed>15 min",subtitle = "Origin= NYC , year=2013")+theme(plot.title = element_text(hjust = 0.5),plot.subtitle = element_text(hjust = 0.5))
+
+  
+```
+
+We can see from this graph that the flights to the vary far places are less delay. We can also understand that there are places that there is more flights that delay that arrive to them from NYC, and they're scattered in the USA without much connection to their closeness to New York.
+
+
+##Question 3: Freestyle analysis
+### We chose to check which airline (carrier) you should choose, based on several criteria: the amount of flights, from which airport (in New York) they depart, and the distribution of delays.
+
+###3.1 
+In this 2 graphs we wanted to show the number of flights per carrier, because we know it affects the people's choice of which airline to fly. We also wanted that the public will know the number of flights per airport beacause there are some people who know in advance which airport they want to go to, and want to know which company is the "strongest" in that airport.
+In the first graph we show the number of flights per airline, with the colors showing how many flights were from each different airport. And for those who are less comfortable seeing the information that way, and want to see more clearly the number of flights of each airline at a particular airport, can look at the second graph (graph B), which is divided into 3 graphs, each showing the number of flights of each airline in the specific airport. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+df_withoutna = na.omit(flights_weather)
+
+#A
+flights_table <- table(df_withoutna$carrier)
+sorted_flights <- sort(flights_table, decreasing = TRUE)
+graph_1 = ggplot(data = df_withoutna, mapping = aes(x =carrier, fill = origin)) +
+  geom_bar()+ylab("Number of flight")+scale_x_discrete(limits = names(sorted_flights))+ ggtitle("Number of flights per carrier")+theme(plot.title = element_text(hjust = 0.5))
+
+#B
+
+graph_2= ggplot(data = df_withoutna, mapping = aes(x =carrier, fill = origin)) +
+  geom_bar()+ylab("Number of flight")+scale_x_discrete(limits = names(sorted_flights))+ggtitle("Number of flights per carrier by airport")+theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size = 5))+facet_wrap(~df_withoutna$origin )
+
+#A+B
+figure <- ggarrange(graph_1, graph_2,
+                    labels = c("A", "B"),nrow = 2)
+figure
+```
+
+From these graphs we can learn that "UA" is the airline that has the biggest number of flights. This airline is also has the biggest number of flight that departure from the airport EWR. The biggest number of flight that departure from the airport JFK belongs to the airline "B6". And the biggest number of flight that departure from the airport LGA belongs to the airline "DL".
+
+
+
+###3.2
+In this graph we wanted to show the distribution of delays* for each of the airlines. We added a red line that shows the avrage delay of all the airline, and so people can see what's the probability that their airline will delay beyond the average time. The longer the black line that showing the median is below and far away from the red line, the more likely that the airline will not be late beyond the average delay time. 
+
+*delays = more then 15 min delay.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+df_withoutna_filter = df_withoutna %>% select(arr_delay,dep_delay,distance,origin,carrier) %>%filter(dep_delay>15)
+ggplot(data = df_withoutna_filter)+  geom_boxplot(mapping = aes(x = carrier,y=dep_delay,group =carrier)) + ylim(0,500)+geom_hline(aes(yintercept = mean(df_withoutna_filter$dep_delay) ,color = "The average delay"),linetype = 2) +scale_colour_manual(values = "red")+ labs(title = "The delay time distribution (in minutes) for each of the airlines (Up to 500 minutes late)",
+       x = "Carrier",
+       y = "Delay time in minutes",
+       color = " ")+theme(plot.title = element_text(hjust = 0.25))
+ 
+```
+
+Here we can see that the airlines that are likelihood to be late beyond the average time are "OO" and "YV".
+
+
+##Question 4: Graphical Lineup - Misdar Zihui
+
+###4.1 
+In this graph we wanted to check whether delayed-departure has a seasonal pattern.
+Therefor we calculate the average flight delay* for each of the month (in minutes).
+
+*delay = more then 15 min delay.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+df_withoutna_filter = df_withoutna %>% select(arr_delay,dep_delay,distance,origin,carrier,month) %>%filter(dep_delay>15) 
+mean_by_month = aggregate(df_withoutna_filter$dep_delay, list(df_withoutna_filter$month), mean)
+names(mean_by_month)=c("month","mean")
+ggplot(data = mean_by_month, mapping = aes(x =month,y=mean))+geom_bar(stat = "identity")+scale_x_discrete(limits=month.name)+ ggtitle("The average flight delay (in minutes) per month")+theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle=45))+ ylab("Average flight delay (in minutes)")
+```
+
+###4.2
+Later, we wanted to check wheather our null hypothesis, that the average flight delay may change
+per month, but varies randomly across the year, is true. In oreder to do so, we Produce simulated data-sets based on the null hypothesis. In this graph we have 9 graph that are simulate from the real data, and one that is the real data, and we need to see if we can recognize the real one.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+ggplot(lineup(null_permute("month"),true =mean_by_month, n=10, pos=7), aes(month,mean))+ geom_bar(stat = "identity")+scale_x_discrete(limits=c(1:12))+ggtitle("simulated data-sets based on the null hypothesis",subtitle = "null hypothesis = the average fight delay may change per month, but varies randomly across the year") +theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))+ylab("Average flight delay (in minutes)") +facet_wrap(~ .sample)
+
+```
+
+###4.3
+We think that it is possible to identified the real one (in this case we put it in graph number 7) because we can gusse that during the summer there are more flights and therefor more delays.
+
+
+#### We think that the graph with the average flight does show us the differences in the summer months, but we think that there are more differences between the months over the year. And therefor we build another graph that shows whether delayed-departure has a seasonal pattern, but instead of using average delay per month, we use the rate (percent) of the delays.
+
+### 4.1 *in percentages*
+
+in order to calculate the percent of the delays per month,we count the number of time that there were flights that were delayed* for each month, and divide it by the total number of flights that were in the same month, and doubled it by 100. Then we build a graph (like the one with the average) that showes the percent of flights that were dealy for each month.
+
+*delay = more then 15 min delay.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+df_withoutna_filter = df_withoutna %>% select(arr_delay,dep_delay,distance,origin,carrier,month) %>%filter(dep_delay>15) 
+
+flights_per_month = df_withoutna %>% group_by(month) %>% count()
+flights_per_month_delay = df_withoutna %>% group_by(month) %>% filter(dep_delay > 15) %>% count()
+
+total_and_delay_per_month = merge(x = flights_per_month, y = flights_per_month_delay, by = "month", all.x = TRUE)
+
+total_and_delay_per_month$precent <- (total_and_delay_per_month$n.y/total_and_delay_per_month$n.x)*100
+
+
+ggplot(data = total_and_delay_per_month, mapping = aes(x =month,y=precent))+geom_bar(stat = "identity")+scale_x_discrete(limits=month.name)+ ggtitle("Percentage of flights delay per month") +theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle=45))+ ylab("Percent delay")
+
+```
+
+Now we can see that beside the months in the summer, there is also a month with a big percent of delay flights and it's the month December. We know that in this month there are 2 big holidays (Christmas and New year), that pepple are flying to see their familys, so the amount of flights is rising, and so is the delay. We think that we didnt see it in the average graph, because we think that the number of flights (and then the delays) only raise in the holidays day only (and it was'nt enough to affect the average), as opposed to the month in summer, that thier is about a moth and a half vacation.
+
+###4.2 *in precentages*
+we also wanted to check wheather our null hypothesis, that the rate of flight delay* may change
+per month, but varies randomly across the year, is true. In oreder to do so, we Produce simulated data-sets based on the null hypothesis. In this graph we have 9 graph that are simulate from the real data, and one that is the real data, and we need to see if we can recognize the real one.
+
+*delay = more then 15 min delay.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+#precent_delay_per_month = data_frame(total_and_delay_per_month$month, total_and_delay_per_month$precent)
+
+#names(precent_delay_per_month)=c("month","precent")
+
+ggplot(lineup(null_permute("month"),true =total_and_delay_per_month, n=10, pos=7), aes(month,precent))+ geom_bar(stat = "identity")+scale_x_discrete(limits=c(1:12))+ ggtitle("simulated data-sets based on the null hypothesis",subtitle = "null hypothesis = the percentage of flights delay may change per month, but varies randomly across the year") +theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))+ylab("Percent delay")+facet_wrap(~ .sample)
+
+```
+
+###4.3 *in percentage*
+We think that it is possible to identified the real one (in this case we put it in graph number 7) because we can gusse that during the summer and the holidays there are more flights and therefor more delays.
+
+
+
+
+
+
+
+
