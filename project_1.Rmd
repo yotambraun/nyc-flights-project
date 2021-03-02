@@ -1,7 +1,6 @@
 ---
 title: "Project_1"
-author: " Yotam Braun 309914646, Shira Rothmann 208309245"
-date: "21.4.2020"
+author: " Yotam Braun"
 output: html_document
 ---
 ###main libraries:
